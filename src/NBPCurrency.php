@@ -3,24 +3,38 @@
 namespace ventaquil\NBPCurrency;
 
 use ventaquil\NBPCurrency\CurrencyBuilder;
+use ventaquil\NBPCurrency\Interfaces\FunctionalityInterface;
 
-abstract class NBPCurrency {
-    public static function currency($code)
+final class NBPCurrency implements FunctionalityInterface {
+    private static $instance;
+
+    private function __construct() { }
+
+    public function currency($code)
     {
         return self::newCurrencyBuilder()->currency($code);
     }
 
-    public static function date($date)
+    public function date($date)
     {
         return self::newCurrencyBuilder()->date($date);
     }
 
-    private static function newCurrencyBuilder()
+    public static function getInstance()
+    {
+        if (is_null(self::$instance)) {
+            self::$instance = new self();
+        }
+
+        return self::$instance;
+    }
+
+    private function newCurrencyBuilder()
     {
         return new CurrencyBuilder();
     }
 
-    public static function read($read)
+    public function read($read)
     {
         if (!is_array($read)) {
             $read = array($read);
@@ -28,4 +42,4 @@ abstract class NBPCurrency {
 
         return self::newCurrencyBuilder()->read($read);
     }
-};
+}

@@ -4,6 +4,4 @@ namespace ventaquil\NBPCurrency\Exceptions;
 
 use Exception;
 
-class NotValidCodeException extends Exception {
-    
-};
+class NotValidCodeException extends Exception { }

@@ -7,8 +7,9 @@ use SimpleXMLElement;
 use UnexpectedValueException;
 use ventaquil\NBPCurrency\Currency;
 use ventaquil\NBPCurrency\Exceptions\NotValidDateException;
+use ventaquil\NBPCurrency\Interfaces\FunctionalityInterface;
 
-class CurrencyBuilder {
+class CurrencyBuilder implements FunctionalityInterface {
     protected $date;
     protected $currency;
     protected $read;
@@ -153,4 +154,4 @@ class CurrencyBuilder {
             }
         }
     }  
-};
+}

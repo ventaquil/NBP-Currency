@@ -4,6 +4,4 @@ namespace ventaquil\NBPCurrency\Exceptions;
 
 use Exception;
 
-class MissingDateException extends Exception {
-    
-};
+class MissingDateException extends Exception { }
