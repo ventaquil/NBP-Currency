@@ -73,7 +73,7 @@ class Currency {
             if (!is_numeric($argument) || is_bool($argument)) {
                 throw new NotNumericException('Sent argument is not a numeric value');
             } elseif ($argument <= 0) {
-                throw new ZeroValueException('Sent argument is not a numeric value');
+                throw new ZeroValueException('Argument is less than or equal to zero');
             }
         }
     }
