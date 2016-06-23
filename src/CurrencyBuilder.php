@@ -49,27 +49,115 @@ class CurrencyBuilder implements FunctionalityInterface {
 
     public function load()
     {
-        if (is_array($this->currency)) {
-            $currency = $this->loadMany();
-        } else {
-            $currency = $this->loadOne($this->currency);
+        $currencyIsArray = is_array($this->currency);
+        $dateIsArray = is_array($this->date);
+
+        switch (true) {
+            case !$currencyIsArray && !$dateIsArray:
+                $data = $this->loadOneToOne($this->currency);
+                break;
+            case !$currencyIsArray && $dateIsArray:
+                $data = $this->loadOneToMany($this->currency);
+                break;
+            case $currencyIsArray && !$dateIsArray:
+                $data = $this->loadManyToOne();
+                break;
+            case $currencyIsArray && $dateIsArray:
+                $data = $this->loadManyToMany();
+                break;
         }
 
-        return $currency;
+        return $data;
     }
 
-    protected function loadMany()
+    protected function loadManyToMany()
     {
         $currencies = array();
 
         foreach ($this->currency as $currency) {
-            $currencies[] = $this->loadOne($currency);
+            $currencies[$currency] = $this->loadOneToMany($currency);
         }
 
         return $currencies;
     }
 
-    protected function loadOne($currency)
+    protected function loadManyToOne()
+    {
+        $currencies = array();
+
+        foreach ($this->currency as $currency) {
+            $currencies[$currency] = $this->loadOneToOne($currency);
+        }
+
+        return $currencies;
+    }
+
+    protected function loadOneToMany($currency)
+    {
+        $buy = $date
+             = $mid
+             = $sell
+             = array();
+
+        if (in_array('mid', $this->read)) {
+            $xml = file_get_contents("http://api.nbp.pl/api/exchangerates/rates/A/{$currency}/{$this->date[0]}/{$this->date[1]}?format=xml");
+            $simpleXML = new SimpleXMLElement($xml);
+
+            $i = 0;
+            foreach ($simpleXML->Rates->Rate as $rate) {
+                $mid[$i] = $rate->Mid
+                                ->__toString();
+
+                $date[$i] = $rate->EffectiveDate
+                                 ->__toString();
+
+                $i++;
+            }
+        }
+
+        $buyIn = in_array('buy', $this->read);
+        $sellIn = in_array('sell', $this->read);
+        if ($buyIn || $sellIn) {
+            $xml = file_get_contents("http://api.nbp.pl/api/exchangerates/rates/C/{$currency}/{$this->date[0]}/{$this->date[1]}?format=xml");
+            $simpleXML = new SimpleXMLElement($xml);
+    
+            $i = 0;
+            foreach ($simpleXML->Rates->Rate as $rate) {
+                if ($buyIn) {
+                    $buy[$i] = $rate->Ask
+                                    ->__toString();
+                }
+        
+                if ($sellIn) {
+                    $sell[$i] = $rate->Bid
+                                     ->__toString();
+                }
+
+                $date[$i] = $rate->EffectiveDate
+                                 ->__toString();
+                $i++;
+            }
+        }
+
+        $currencies = array();
+        foreach ($date as $i => $d) {
+            if (!is_null($d)) {
+                $date[$i] = date('d-m-Y', strtotime($d));
+            }
+
+            foreach (array('buy', 'mid', 'sell') as $variable) {
+                if (!isset(${$variable}[$i])) {
+                    ${$variable}[$i] = null;
+                }
+            }
+
+            $currencies[] = new Currency($currency, $buy[$i], $sell[$i], $mid[$i], $date[$i]);
+        }
+
+        return $currencies;
+    }
+
+    protected function loadOneToOne($currency)
     {
         $buy = $date
              = $mid
