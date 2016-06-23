@@ -6,6 +6,7 @@ use DateTime;
 use SimpleXMLElement;
 use UnexpectedValueException;
 use ventaquil\NBPCurrency\Currency;
+use ventaquil\NBPCurrency\Exceptions\MissingCurrencyException;
 use ventaquil\NBPCurrency\Exceptions\NotValidDateException;
 use ventaquil\NBPCurrency\Interfaces\FunctionalityInterface;
 
@@ -49,6 +50,10 @@ class CurrencyBuilder implements FunctionalityInterface {
 
     public function load()
     {
+        if (is_null($this->currency)) {
+            throw new MissingCurrencyException('You are forgetting something?');
+        }
+
         $currencyIsArray = is_array($this->currency);
         $dateIsArray = is_array($this->date);
 
