@@ -20,6 +20,11 @@ final class NBPCurrency implements FunctionalityInterface {
         return self::newCurrencyBuilder()->date($date);
     }
 
+    public static function instance()
+    {
+        return self::getInstance();
+    }
+
     public static function getInstance()
     {
         if (is_null(self::$instance)) {
