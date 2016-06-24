@@ -54,64 +54,64 @@ class CurrencyBuilder implements FunctionalityInterface {
             throw new MissingCurrencyException('You are forgetting something?');
         }
 
-        $currencyIsArray = is_array($this->currency);
-        $dateIsArray = is_array($this->date);
+        if (is_array($this->currency)) {
+            $data = $this->loadManyCurrency();
 
-        switch (true) {
-            case !$currencyIsArray && !$dateIsArray:
-                $data = $this->loadOneToOne($this->currency);
-                break;
-            case !$currencyIsArray && $dateIsArray:
-                $data = $this->loadOneToMany($this->currency);
-                break;
-            case $currencyIsArray && !$dateIsArray:
-                $data = $this->loadManyToOne();
-                break;
-            case $currencyIsArray && $dateIsArray:
-                $data = $this->loadManyToMany();
-                break;
+            foreach ($data as $currency => $d) {
+                $data[$currency] = $this->validateDateRange($d, $currency);
+            }
+        } else {
+            $data = $this->loadOneCurrency();
+
+            $data = $this->validateDateRange($data, $this->currency);
+        }
+
+        while (count($data) == 1) {
+            $key = array_keys($data)[0];
+
+            $data = $data[$key];
         }
 
         return $data;
     }
 
-    protected function loadManyToMany()
+    protected function loadManyCurrency()
     {
         $currencies = array();
 
         foreach ($this->currency as $currency) {
-            $currencies[$currency] = $this->loadOneToMany($currency);
+            $currencies[$currency] = $this->loadOneCurrency($currency);
         }
 
         return $currencies;
     }
 
-    protected function loadManyToOne()
-    {
-        $currencies = array();
-
-        foreach ($this->currency as $currency) {
-            $currencies[$currency] = $this->loadOneToOne($currency);
-        }
-
-        return $currencies;
-    }
-
-    protected function loadOneToMany($currency)
+    protected function loadOneCurrency($currency = null)
     {
         $buy = $date
              = $mid
              = $sell
              = array();
 
+        if (is_null($currency)) {
+            $currency = $this->currency;
+        }
+
+        if (is_array($this->date)) {
+            $xmlUrl = "http://api.nbp.pl/api/exchangerates/rates/%s/{$currency}/{$this->date[0]}/{$this->date[1]}?format=xml";
+        } else {
+            $xmlUrl = "http://api.nbp.pl/api/exchangerates/rates/%s/{$currency}/{$this->date}?format=xml";
+        }
+
         if (in_array('mid', $this->read)) {
-            $xml = file_get_contents("http://api.nbp.pl/api/exchangerates/rates/A/{$currency}/{$this->date[0]}/{$this->date[1]}?format=xml");
+            $xml = file_get_contents(sprintf($xmlUrl, 'A'));
+
             $simpleXML = new SimpleXMLElement($xml);
 
             $i = 0;
             foreach ($simpleXML->Rates->Rate as $rate) {
                 $mid[$i] = $rate->Mid
-                                ->__toString();
+                            ->__toString();
 
                 $date[$i] = $rate->EffectiveDate
                                  ->__toString();
@@ -123,9 +123,10 @@ class CurrencyBuilder implements FunctionalityInterface {
         $buyIn = in_array('buy', $this->read);
         $sellIn = in_array('sell', $this->read);
         if ($buyIn || $sellIn) {
-            $xml = file_get_contents("http://api.nbp.pl/api/exchangerates/rates/C/{$currency}/{$this->date[0]}/{$this->date[1]}?format=xml");
+            $xml = file_get_contents(sprintf($xmlUrl, 'C'));
+
             $simpleXML = new SimpleXMLElement($xml);
-    
+
             $i = 0;
             foreach ($simpleXML->Rates->Rate as $rate) {
                 if ($buyIn) {
@@ -140,11 +141,13 @@ class CurrencyBuilder implements FunctionalityInterface {
 
                 $date[$i] = $rate->EffectiveDate
                                  ->__toString();
+
                 $i++;
             }
         }
 
         $currencies = array();
+
         foreach ($date as $i => $d) {
             if (!is_null($d)) {
                 $date[$i] = date('d-m-Y', strtotime($d));
@@ -162,61 +165,6 @@ class CurrencyBuilder implements FunctionalityInterface {
         return $currencies;
     }
 
-    protected function loadOneToOne($currency)
-    {
-        $buy = $date
-             = $mid
-             = $sell
-             = null;
-
-        if (in_array('mid', $this->read)) {
-            $xml = file_get_contents("http://api.nbp.pl/api/exchangerates/rates/A/{$currency}/{$this->date}?format=xml");
-            $simpleXML = new SimpleXMLElement($xml);
-
-            $mid = $simpleXML->Rates
-                             ->Rate
-                             ->Mid
-                             ->__toString();
-
-            $date = $simpleXML->Rates
-                              ->Rate
-                              ->EffectiveDate
-                              ->__toString();
-        }
-
-        $buyIn = in_array('buy', $this->read);
-        $sellIn = in_array('sell', $this->read);
-        if ($buyIn || $sellIn) {
-            $xml = file_get_contents("http://api.nbp.pl/api/exchangerates/rates/C/{$currency}/{$this->date}?format=xml");
-            $simpleXML = new SimpleXMLElement($xml);
-    
-            if ($buyIn) {
-                $buy = $simpleXML->Rates
-                                 ->Rate
-                                 ->Ask
-                                 ->__toString();
-            }
-    
-            if ($sellIn) {
-                $sell = $simpleXML->Rates
-                                  ->Rate
-                                  ->Bid
-                                  ->__toString();
-            }
-
-            $date = $simpleXML->Rates
-                              ->Rate
-                              ->EffectiveDate
-                              ->__toString();
-        }
-
-        if (!is_null($date)) {
-            $date = date('d-m-Y', strtotime($date));
-        }
-
-        return new Currency($currency, $buy, $sell, $mid, $date);
-    }
-
     public function read($read)
     {
         if (!is_array($read)) {
@@ -228,6 +176,51 @@ class CurrencyBuilder implements FunctionalityInterface {
         $this->read = $read;
 
         return $this;
+    }
+
+    protected function validateDateRange($data, $currency)
+    {
+        if (is_array($this->date)) {
+            $newData = array();
+
+            $from = $this->date[0];
+            $fromDate = strtotime($from);
+
+            $i = 0;
+            foreach ($data as $object) {
+                do {
+                    $date = strtotime("-{$i} day", strtotime($object->date));
+
+                    if ($date == $fromDate) {
+                        $newData[] = $object;
+                    } else {
+                        $newData[] = new Currency($currency, null, null, null, date('d-m-Y', $fromDate + ($i * 24 * 60 * 60)));
+                    }
+
+                    $i++;
+                } while ($date != $fromDate);
+            }
+
+            $keys = array_reverse(array_keys($newData));
+            if (empty($keys)) {
+                $lastDate = $fromDate;
+            } else {
+                $lastDate = strtotime($newData[$keys[0]]->date);
+            }
+
+            $to = $this->date[1];
+            $toDate = strtotime($to);
+
+            while ($lastDate < $toDate) {
+                $newData[] = new Currency($currency, null, null, null, date('d-m-Y', $lastDate));
+
+                $lastDate = strtotime('+1 day', $lastDate);
+            }
+
+            $data = $newData;
+        }
+
+        return $data;
     }
 
     protected function validateDateValue($date)
@@ -242,7 +235,7 @@ class CurrencyBuilder implements FunctionalityInterface {
     protected function validateReadValues($read)
     {
         foreach ($read as $value) {
-            if(!in_array(strtolower($value), array('buy', 'mid', 'sell'))) {
+            if (!in_array(strtolower($value), array('buy', 'mid', 'sell'))) {
                 throw new UnexpectedValueException("Value {$value} is not valid");
             }
         }
