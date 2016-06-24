@@ -15,6 +15,15 @@ class CurrencyBuilder implements FunctionalityInterface {
     protected $currency;
     protected $read;
 
+    protected function createXMLUrl($currency)
+    {
+        if (is_array($this->date)) {
+            return "http://api.nbp.pl/api/exchangerates/rates/%s/{$currency}/{$this->date[0]}/{$this->date[1]}?format=xml";
+        }
+
+        return "http://api.nbp.pl/api/exchangerates/rates/%s/{$currency}/{$this->date}?format=xml";
+    }
+
     public function currency($code)
     {
         $this->currency = $code;
@@ -46,6 +55,74 @@ class CurrencyBuilder implements FunctionalityInterface {
         $this->validateDateValue($date);
 
         $this->date = $date;
+    }
+
+    protected function generateCurrenciesArray($currency, $buy, $date, $mid, $sell) {
+        $currencies = array();
+
+        foreach ($date as $i => $d) {
+            if (!is_null($d)) {
+                $date[$i] = date('d-m-Y', strtotime($d));
+            }
+
+            foreach (array('buy', 'mid', 'sell') as $variable) {
+                if (!isset(${$variable}[$i])) {
+                    ${$variable}[$i] = null;
+                }
+            }
+
+            $currencies[] = new Currency($currency, $buy[$i], $sell[$i], $mid[$i], $date[$i]);
+        }
+
+        return $currencies;
+    }
+
+    protected function getBuyAndSellValues($simpleXML) {
+        $buy = $sell
+             = $date
+             = array();
+
+        $buyIn = in_array('buy', $this->read);
+        $sellIn = in_array('sell', $this->read);
+
+        $i = 0;
+        foreach ($simpleXML->Rates->Rate as $rate) {
+            if ($buyIn) {
+                $buy[$i] = $rate->Ask
+                                ->__toString();
+            }
+    
+            if ($sellIn) {
+                $sell[$i] = $rate->Bid
+                                 ->__toString();
+            }
+
+            $date[$i] = $rate->EffectiveDate
+                             ->__toString();
+
+            $i++;
+        }
+
+        return array($buy, $sell, $date);
+    }
+
+    protected function getMidValues($simpleXML)
+    {
+        $mid = $date
+             = array();
+
+        $i = 0;
+        foreach ($simpleXML->Rates->Rate as $rate) {
+            $mid[$i] = $rate->Mid
+                        ->__toString();
+
+            $date[$i] = $rate->EffectiveDate
+                             ->__toString();
+
+            $i++;
+        }
+
+        return array($mid, $date);
     }
 
     public function load()
@@ -97,70 +174,21 @@ class CurrencyBuilder implements FunctionalityInterface {
             $currency = $this->currency;
         }
 
-        if (is_array($this->date)) {
-            $xmlUrl = "http://api.nbp.pl/api/exchangerates/rates/%s/{$currency}/{$this->date[0]}/{$this->date[1]}?format=xml";
-        } else {
-            $xmlUrl = "http://api.nbp.pl/api/exchangerates/rates/%s/{$currency}/{$this->date}?format=xml";
-        }
+        $xmlUrl = $this->createXMLUrl($currency);
 
         if (in_array('mid', $this->read)) {
             $xml = file_get_contents(sprintf($xmlUrl, 'A'));
 
-            $simpleXML = new SimpleXMLElement($xml);
-
-            $i = 0;
-            foreach ($simpleXML->Rates->Rate as $rate) {
-                $mid[$i] = $rate->Mid
-                            ->__toString();
-
-                $date[$i] = $rate->EffectiveDate
-                                 ->__toString();
-
-                $i++;
-            }
+            list($mid, $date) = $this->getMidValues(new SimpleXMLElement($xml));
         }
 
-        $buyIn = in_array('buy', $this->read);
-        $sellIn = in_array('sell', $this->read);
-        if ($buyIn || $sellIn) {
+        if (in_array('buy', $this->read) || in_array('sell', $this->read)) {
             $xml = file_get_contents(sprintf($xmlUrl, 'C'));
 
-            $simpleXML = new SimpleXMLElement($xml);
-
-            $i = 0;
-            foreach ($simpleXML->Rates->Rate as $rate) {
-                if ($buyIn) {
-                    $buy[$i] = $rate->Ask
-                                    ->__toString();
-                }
-        
-                if ($sellIn) {
-                    $sell[$i] = $rate->Bid
-                                     ->__toString();
-                }
-
-                $date[$i] = $rate->EffectiveDate
-                                 ->__toString();
-
-                $i++;
-            }
+            list($buy, $sell, $date) = $this->getBuyAndSellValues(new SimpleXMLElement($xml));
         }
 
-        $currencies = array();
-
-        foreach ($date as $i => $d) {
-            if (!is_null($d)) {
-                $date[$i] = date('d-m-Y', strtotime($d));
-            }
-
-            foreach (array('buy', 'mid', 'sell') as $variable) {
-                if (!isset(${$variable}[$i])) {
-                    ${$variable}[$i] = null;
-                }
-            }
-
-            $currencies[] = new Currency($currency, $buy[$i], $sell[$i], $mid[$i], $date[$i]);
-        }
+        $currencies = $this->generateCurrenciesArray($currency, $buy, $date, $mid, $sell);
 
         return $currencies;
     }
