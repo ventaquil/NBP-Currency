@@ -10,7 +10,8 @@ use ventaquil\NBPCurrency\Exceptions\NotValidDateException;
 use ventaquil\NBPCurrency\Exceptions\ZeroValueException;
 use PHPUnit_Framework_TestCase;
 
-class CurrencyTest extends PHPUnit_Framework_TestCase {
+class CurrencyTest extends PHPUnit_Framework_TestCase
+{
     public function testConstructor()
     {
         try {

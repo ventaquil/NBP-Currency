@@ -2,7 +2,8 @@
 
 namespace ventaquil\NBPCurrency\Interfaces;
 
-interface FunctionalityInterface {
+interface FunctionalityInterface
+{
     public function currency($code);
 
     public function date($date);

@@ -9,7 +9,8 @@ use ventaquil\NBPCurrency\Exceptions\NotValidCodeException;
 use ventaquil\NBPCurrency\Exceptions\NotValidDateException;
 use ventaquil\NBPCurrency\Exceptions\ZeroValueException;
 
-class Currency {
+class Currency
+{
     protected $buy;
     protected $code;
     protected $date;

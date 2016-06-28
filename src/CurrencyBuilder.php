@@ -10,18 +10,23 @@ use ventaquil\NBPCurrency\Exceptions\MissingCurrencyException;
 use ventaquil\NBPCurrency\Exceptions\NotValidDateException;
 use ventaquil\NBPCurrency\Interfaces\FunctionalityInterface;
 
-class CurrencyBuilder implements FunctionalityInterface {
+class CurrencyBuilder implements FunctionalityInterface
+{
     protected $date;
     protected $currency;
     protected $read;
 
-    protected function createXMLUrl($currency)
+    protected function createXMLUrl($currency, $type = null)
     {
-        if (is_array($this->date)) {
-            return "http://api.nbp.pl/api/exchangerates/rates/%s/{$currency}/{$this->date[0]}/{$this->date[1]}?format=xml";
+        if (!is_null($type)) {
+            return sprintf($this->createXMLUrl($currency), $type);
         }
 
-        return "http://api.nbp.pl/api/exchangerates/rates/%s/{$currency}/{$this->date}?format=xml";
+        if (is_array($this->date)) {
+            return "http://api.nbp.pl/api/exchangerates/rates/%s/{$currency}/{$this->date[0]}/{$this->date[1]}?format=xml";
+        } else {
+            return "http://api.nbp.pl/api/exchangerates/rates/%s/{$currency}/{$this->date}?format=xml";
+        }
     }
 
     public function currency($code)
@@ -57,140 +62,118 @@ class CurrencyBuilder implements FunctionalityInterface {
         $this->date = $date;
     }
 
-    protected function generateCurrenciesArray($currency, $buy, $date, $mid, $sell) {
-        $currencies = array();
-
-        foreach ($date as $i => $d) {
-            if (!is_null($d)) {
-                $date[$i] = date('d-m-Y', strtotime($d));
-            }
-
-            foreach (array('buy', 'mid', 'sell') as $variable) {
-                if (!isset(${$variable}[$i])) {
-                    ${$variable}[$i] = null;
-                }
-            }
-
-            $currencies[] = new Currency($currency, $buy[$i], $sell[$i], $mid[$i], $date[$i]);
-        }
-
-        return $currencies;
-    }
-
-    protected function getBuyAndSellValues($simpleXML) {
-        $buy = $sell
-             = $date
-             = array();
-
-        $buyIn = in_array('buy', $this->read);
-        $sellIn = in_array('sell', $this->read);
-
-        $i = 0;
-        foreach ($simpleXML->Rates->Rate as $rate) {
-            if ($buyIn) {
-                $buy[$i] = $rate->Ask
-                                ->__toString();
-            }
-    
-            if ($sellIn) {
-                $sell[$i] = $rate->Bid
-                                 ->__toString();
-            }
-
-            $date[$i] = $rate->EffectiveDate
-                             ->__toString();
-
-            $i++;
-        }
-
-        return array($buy, $sell, $date);
-    }
-
-    protected function getMidValues($simpleXML)
-    {
-        $mid = $date
-             = array();
-
-        $i = 0;
-        foreach ($simpleXML->Rates->Rate as $rate) {
-            $mid[$i] = $rate->Mid
-                        ->__toString();
-
-            $date[$i] = $rate->EffectiveDate
-                             ->__toString();
-
-            $i++;
-        }
-
-        return array($mid, $date);
-    }
-
     public function load()
     {
         if (is_null($this->currency)) {
             throw new MissingCurrencyException('You are forgetting something?');
         }
 
-        if (is_array($this->currency)) {
-            $data = $this->loadManyCurrency();
-
-            foreach ($data as $currency => $d) {
-                $data[$currency] = $this->validateDateRange($d, $currency);
-            }
-        } else {
-            $data = $this->loadOneCurrency();
-
-            $data = $this->validateDateRange($data, $this->currency);
+        if (!is_array($this->currency)) {
+            $this->currency = array($this->currency);
         }
 
-        while (count($data) == 1) {
-            $key = array_keys($data)[0];
-
-            $data = $data[$key];
-        }
-
-        return $data;
-    }
-
-    protected function loadManyCurrency()
-    {
         $currencies = array();
-
         foreach ($this->currency as $currency) {
-            $currencies[$currency] = $this->loadOneCurrency($currency);
+            $currencies[$currency] = $this->loadOne($currency);
+        }
+
+        if (count($currencies) == 1) {
+            return $currencies[array_keys($currencies)[0]];
         }
 
         return $currencies;
     }
 
-    protected function loadOneCurrency($currency = null)
+    protected function loadBuy($currency)
     {
-        $buy = $date
-             = $mid
-             = $sell
-             = array();
+        $buy = array();
 
-        if (is_null($currency)) {
-            $currency = $this->currency;
+        if (in_array('buy', $this->read)) {
+            $xmlUrl = $this->createXMLUrl($currency, 'C');
+
+            $xml = file_get_contents($xmlUrl);
+
+            $simpleXML = new SimpleXMLElement($xml);
+
+            foreach ($simpleXML->Rates->Rate as $rate) {
+                $date = $rate->EffectiveDate
+                    ->__toString();
+
+                $buy[$date] = $rate->Ask
+                    ->__toString();
+            }
         }
 
-        $xmlUrl = $this->createXMLUrl($currency);
+        return $buy;
+    }
+
+    protected function loadMid($currency)
+    {
+        $mid = array();
 
         if (in_array('mid', $this->read)) {
-            $xml = file_get_contents(sprintf($xmlUrl, 'A'));
+            $xmlUrl = $this->createXMLUrl($currency, 'A');
 
-            list($mid, $date) = $this->getMidValues(new SimpleXMLElement($xml));
+            $xml = file_get_contents($xmlUrl);
+
+            $simpleXML = new SimpleXMLElement($xml);
+
+            foreach ($simpleXML->Rates->Rate as $rate) {
+                $date = $rate->EffectiveDate
+                             ->__toString();
+
+                $mid[$date] = $rate->Mid
+                                   ->__toString();
+            }
         }
 
-        if (in_array('buy', $this->read) || in_array('sell', $this->read)) {
-            $xml = file_get_contents(sprintf($xmlUrl, 'C'));
+        return $mid;
+    }
 
-            list($buy, $sell, $date) = $this->getBuyAndSellValues(new SimpleXMLElement($xml));
+    protected function loadOne($currency)
+    {
+        $buy = $this->loadBuy($currency);
+        $mid = $this->loadMid($currency);
+        $sell = $this->loadSell($currency);
+
+        $related = $this->relate($buy, $mid, $sell);
+
+        $dateRange = new DateRange();
+
+        foreach ($related as $date => $record) {
+            $dateRange[$date] = new Currency($currency, $record['buy'], $record['sell'], $record['mid'], date('d-m-Y', strtotime($date)));
         }
 
-        $currencies = $this->generateCurrenciesArray($currency, $buy, $date, $mid, $sell);
+        $dateRange->validate();
 
-        return $currencies;
+        if ($dateRange->count() == 1) {
+            return $dateRange->first();
+        }
+
+        return $dateRange;
+    }
+
+    protected function loadSell($currency)
+    {
+        $sell = array();
+
+        if (in_array('sell', $this->read)) {
+            $xmlUrl = $this->createXMLUrl($currency, 'C');
+
+            $xml = file_get_contents($xmlUrl);
+
+            $simpleXML = new SimpleXMLElement($xml);
+
+            foreach ($simpleXML->Rates->Rate as $rate) {
+                $date = $rate->EffectiveDate
+                             ->__toString();
+
+                $sell[$date] = $rate->Bid
+                                    ->__toString();
+            }
+        }
+
+        return $sell;
     }
 
     public function read($read)
@@ -206,46 +189,29 @@ class CurrencyBuilder implements FunctionalityInterface {
         return $this;
     }
 
-    protected function validateDateRange($data, $currency)
+    protected function relate($buy, $mid, $sell)
     {
-        if (is_array($this->date)) {
-            $newData = array();
+        $dates = array();
 
-            $from = $this->date[0];
-            $fromDate = strtotime($from);
+        foreach (array('buy', 'mid', 'sell') as $variable) {
+            $keys = array_keys(${$variable});
 
-            $i = 0;
-            foreach ($data as $object) {
-                do {
-                    $date = strtotime("-{$i} day", strtotime($object->date));
-
-                    if ($date == $fromDate) {
-                        $newData[] = $object;
-                    } else {
-                        $newData[] = new Currency($currency, null, null, null, date('d-m-Y', $fromDate + ($i * 24 * 60 * 60)));
-                    }
-
-                    $i++;
-                } while ($date != $fromDate);
+            foreach ($keys as $key) {
+                if (!in_array($key, $dates)) {
+                    $dates[] = $key;
+                }
             }
+        }
 
-            $keys = array_reverse(array_keys($newData));
-            if (empty($keys)) {
-                $lastDate = $fromDate;
-            } else {
-                $lastDate = strtotime($newData[$keys[0]]->date);
-            }
+        sort($dates);
 
-            $to = $this->date[1];
-            $toDate = strtotime($to);
-
-            while ($lastDate < $toDate) {
-                $newData[] = new Currency($currency, null, null, null, date('d-m-Y', $lastDate));
-
-                $lastDate = strtotime('+1 day', $lastDate);
-            }
-
-            $data = $newData;
+        $data = array();
+        foreach ($dates as $date) {
+            $data[$date] = array(
+                'buy' => isset($buy[$date]) ? $buy[$date] : null,
+                'mid' => isset($mid[$date]) ? $mid[$date] : null,
+                'sell' => isset($sell[$date]) ? $sell[$date] : null,
+            );
         }
 
         return $data;

@@ -8,7 +8,8 @@ use ventaquil\NBPCurrency\Exceptions\NotValidDateException;
 use ventaquil\NBPCurrency\Interfaces\FunctionalityInterface;
 use PHPUnit_Framework_TestCase;
 
-class CurrencyBuilderTest extends PHPUnit_Framework_TestCase {
+class CurrencyBuilderTest extends PHPUnit_Framework_TestCase
+{
     public function testImplementedMethods()
     {
         $CurrencyBuilderMethods = get_class_methods(CurrencyBuilder::class);
