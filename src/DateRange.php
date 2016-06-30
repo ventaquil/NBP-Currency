@@ -19,6 +19,15 @@ class DateRange implements ArrayAccess
         return count($this->currencies);
     }
 
+    public function each(callable $callback)
+    {
+        foreach ($this->currencies as $time => $currency) {
+            if (call_user_func($callback, $currency, $time) === false) {
+                break;
+            }
+        }
+    }
+
     public function first()
     {
         $dates = $this->getSortedDates();
