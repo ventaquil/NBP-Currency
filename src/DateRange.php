@@ -102,6 +102,11 @@ class DateRange implements ArrayAccess
         return false;
     }
 
+    public function toArray()
+    {
+        return $this->currencies;
+    }
+
     public function validate()
     {
         $dates = $this->getSortedDates();
